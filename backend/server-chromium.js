@@ -1,12 +1,11 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
-const puppeteer = require('puppeteer-core');
+const puppeteer = require('puppeteer');
 
 const PORT = 3001;
 const LOGIN_URL = 'https://leetcode.com/accounts/login/';
 const SUBMISSIONS_URL = 'https://leetcode.com/submissions/';
-const CHROME_PATH = 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'; // Adjust this path if needed
 
 const wss = new WebSocket.Server({ port: PORT }, () => {
   console.log(`✅ WebSocket server started on ws://localhost:${PORT}`);
@@ -27,17 +26,12 @@ wss.on('connection', ws => {
 async function autoSubmit(config, ws) {
   const { username, password, maxCount, selectedLevels } = config;
 
-  const browser = await puppeteer.launch({
-    headless: false,
-    executablePath: CHROME_PATH,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-
+  const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
   await login(page, username, password);
 
   const submittedProblems = await getSubmittedProblems(page);
-  const localFiles = fs.readdirSync('../solutions');
+  const localFiles = fs.readdirSync('./codes');
   let total = 0;
   let completed = 0;
 
@@ -83,8 +77,8 @@ async function autoSubmit(config, ws) {
 
 async function login(page, username, password) {
   await page.goto(LOGIN_URL, { waitUntil: "networkidle2" });
-  await page.type("id_login", username);
-  await page.type("id_password", password);
+  await page.type("#id_login", username);
+  await page.type("#id_password", password);
   await Promise.all([
     page.click("button[type='submit']"),
     page.waitForNavigation({ waitUntil: "networkidle2" }),
@@ -107,8 +101,10 @@ async function submitSolution(page, { problemName, language, code }) {
   const problemUrl = `https://leetcode.com/problems/${problemName}/`;
   await page.goto(problemUrl, { waitUntil: "networkidle2" });
 
+  // Click into the code editor tab
   await page.waitForSelector('div[data-cy="code-editor"]', { timeout: 10000 });
 
+  // Select language (optional: adjust for your setup)
   await page.click('button[title="Select programming language"]');
   await page.waitForSelector(`div[role="menu"] div`, { timeout: 5000 });
   await page.evaluate((language) => {
@@ -117,13 +113,16 @@ async function submitSolution(page, { problemName, language, code }) {
     if (langBtn) langBtn.click();
   }, language);
 
+  // Focus editor and paste code
   await page.click('.view-lines');
   await page.keyboard.down('Control');
   await page.keyboard.press('A');
   await page.keyboard.up('Control');
   await page.keyboard.press('Backspace');
+
   await page.keyboard.type(code, { delay: 1 });
 
+  // Click submit
   await page.click('button[data-cy="submit-code-btn"]');
   await page.waitForSelector('.text-success', { timeout: 30000 });
 
